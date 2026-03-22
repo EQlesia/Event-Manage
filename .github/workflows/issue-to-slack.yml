@@ -1,0 +1,148 @@
+name: Issue → Slack通知
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write   # バリデーションエラーのコメント返信に使用
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+
+    # イベント登録フォームからのIssueのみ処理（ラベルで識別）
+    if: contains(github.event.issue.labels.*.name, 'event-registration')
+
+    steps:
+      - name: Parse event JSON from issue body
+        id: parse
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.issue.body;
+
+            // JSONブロックを抽出
+            const match = body.match(/```json\s*([\s\S]*?)```/);
+            if (!match) {
+              core.setFailed('IssueボディにJSONブロックが見つかりません');
+              return;
+            }
+
+            let data;
+            try {
+              data = JSON.parse(match[1]);
+            } catch(e) {
+              core.setFailed(`JSON解析エラー: ${e.message}`);
+              return;
+            }
+
+            // バリデーション
+            const required = ['type','title','start_time','end_time','location','location_type','organizer'];
+            const missing = required.filter(f => !data[f]);
+            if (missing.length > 0) {
+              core.setFailed(`必須項目が不足: ${missing.join(', ')}`);
+              return;
+            }
+
+            const validTypes = ['meeting','seminar','social','study'];
+            if (!validTypes.includes(data.type)) {
+              core.setFailed(`typeが不正: ${data.type}`);
+              return;
+            }
+
+            const start = new Date(data.start_time);
+            const end   = new Date(data.end_time);
+            if (isNaN(start) || isNaN(end)) {
+              core.setFailed('日時の形式が不正です');
+              return;
+            }
+            if (end <= start) {
+              core.setFailed('end_timeはstart_timeより後にしてください');
+              return;
+            }
+
+            // 出力にセット
+            core.setOutput('title',         data.title);
+            core.setOutput('type',          data.type);
+            core.setOutput('start_time',    data.start_time);
+            core.setOutput('end_time',      data.end_time);
+            core.setOutput('location',      data.location);
+            core.setOutput('location_type', data.location_type);
+            core.setOutput('url',           data.url || '');
+            core.setOutput('organizer',     data.organizer);
+            core.setOutput('summary',       data.summary || '');
+            core.setOutput('issue_url',     context.payload.issue.html_url);
+
+      # バリデーション失敗時：Issueにコメントして終了
+      - name: Comment on validation failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: context.payload.issue.number,
+              body: `## ❌ イベント登録エラー\n\n入力内容にエラーがあります。フォームから再度登録してください。\n\n詳細はActionsログを確認してください。`
+            });
+
+      # Slack通知
+      - name: Send Slack notification
+        if: success()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          TYPE_LABEL=$(case "${{ steps.parse.outputs.type }}" in
+            meeting) echo "ミーティング" ;;
+            seminar) echo "外部説明会" ;;
+            social)  echo "飲み会" ;;
+            study)   echo "勉強会" ;;
+          esac)
+
+          LOCATION_STR="${{ steps.parse.outputs.location }}（${{ steps.parse.outputs.location_type }}）"
+
+          URL_LINE=""
+          if [ -n "${{ steps.parse.outputs.url }}" ]; then
+            URL_LINE="\n🔗 URL：${{ steps.parse.outputs.url }}"
+          fi
+
+          SUMMARY="${{ steps.parse.outputs.summary }}"
+          if [ -z "$SUMMARY" ]; then
+            SUMMARY="（概要なし）"
+          else
+            # 200文字で切り捨て
+            SUMMARY=$(echo "$SUMMARY" | cut -c1-200)
+          fi
+
+          PAYLOAD=$(cat <<EOF
+          {
+            "text": "📅 *${{ steps.parse.outputs.title }}*\n\n■ 種別：${TYPE_LABEL}\n■ 日時：${{ steps.parse.outputs.start_time }} ～ ${{ steps.parse.outputs.end_time }}\n■ 場所：${LOCATION_STR}${URL_LINE}\n■ 主催：${{ steps.parse.outputs.organizer }}\n\n📝 概要：\n${SUMMARY}\n\n🔗 詳細：${{ steps.parse.outputs.issue_url }}"
+          }
+          EOF
+          )
+
+          curl -s -X POST \
+            -H 'Content-type: application/json' \
+            --data "$PAYLOAD" \
+            "$SLACK_WEBHOOK_URL"
+
+      # 成功時：Issueに完了コメント
+      - name: Comment on success
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: context.payload.issue.number,
+              body: `## ✅ Slack通知を送信しました\n\nイベント「${{ steps.parse.outputs.title }}」の登録が完了し、Slackへ通知しました。`
+            });
+            // Issueをクローズ（処理済みマーク）
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: context.payload.issue.number,
+              state: 'closed'
+            });

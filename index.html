@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>イベント登録</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;700;800&family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #f7f4ee;
+  --surface:  #ffffff;
+  --ink:      #1a1916;
+  --muted:    #8a8478;
+  --rule:     #e2ddd4;
+  --accent:   #c0392b;
+  --ok:       #1e7d4b;
+  --mono:     'DM Mono', monospace;
+  --sans:     'Noto Sans JP', sans-serif;
+  --serif:    'Shippori Mincho', serif;
+  --r:        6px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--sans); min-height: 100vh; }
+
+.site-header {
+  background: var(--ink); color: var(--bg);
+  padding: 18px 40px; display: flex; align-items: center; gap: 20px;
+}
+.site-logo { font-family: var(--serif); font-size: 18px; font-weight: 800; letter-spacing: -0.01em; }
+.site-logo em { color: #e07060; font-style: normal; }
+.site-badge { font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; opacity: 0.4; text-transform: uppercase; margin-left: auto; }
+
+.page { max-width: 780px; margin: 0 auto; padding: 56px 40px 80px; }
+.page-eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+.page-title { font-family: var(--serif); font-size: 36px; font-weight: 800; line-height: 1.15; letter-spacing: -0.025em; margin-bottom: 8px; }
+.page-desc { font-size: 14px; color: var(--muted); line-height: 1.7; margin-bottom: 48px; max-width: 520px; }
+
+.config-banner { background: #fff8e1; border: 1.5px solid #f5c842; border-radius: var(--r); padding: 14px 18px; margin-bottom: 32px; font-size: 13px; line-height: 1.6; display: none; }
+.config-banner.show { display: block; }
+.config-banner strong { color: #7a5c00; }
+.config-banner code { background: rgba(0,0,0,0.07); padding: 1px 5px; border-radius: 3px; font-family: var(--mono); font-size: 12px; }
+
+.form-card { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; animation: fadeUp 0.35s ease both; }
+
+.type-tabs { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--rule); }
+.type-tab { padding: 18px 12px 16px; border: none; background: transparent; cursor: pointer; text-align: center; border-right: 1px solid var(--rule); transition: background 0.12s; position: relative; }
+.type-tab:last-child { border-right: none; }
+.type-tab:hover { background: var(--bg); }
+.type-tab.active { background: var(--ink); color: white; }
+.type-tab.active::after { content: ''; position: absolute; bottom: -1px; left: 20%; right: 20%; height: 2px; background: var(--accent); }
+.tab-icon { font-size: 22px; display: block; margin-bottom: 4px; line-height: 1; }
+.tab-jp { font-size: 11px; font-weight: 700; display: block; letter-spacing: 0.04em; }
+.tab-en { font-family: var(--mono); font-size: 9px; opacity: 0.45; letter-spacing: 0.08em; display: block; margin-top: 2px; }
+
+.form-body { padding: 36px 40px 40px; }
+
+.slabel { font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); padding-bottom: 8px; border-bottom: 1px solid var(--rule); margin-bottom: 20px; margin-top: 32px; }
+.slabel:first-child { margin-top: 0; }
+
+.field { margin-bottom: 18px; }
+label { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 6px; }
+.req { font-family: var(--mono); font-size: 9px; color: var(--accent); letter-spacing: 0.06em; text-transform: uppercase; }
+
+input[type=text], input[type=datetime-local], input[type=url], select, textarea {
+  width: 100%; padding: 10px 13px; border: 1.5px solid var(--rule); border-radius: var(--r);
+  background: var(--bg); font-family: var(--sans); font-size: 14px; color: var(--ink);
+  outline: none; transition: border-color 0.13s, background 0.13s; -webkit-appearance: none;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--ink); background: white; }
+input.err, select.err, textarea.err { border-color: var(--accent); background: #fff8f7; }
+
+.err-msg { font-size: 11px; color: var(--accent); margin-top: 5px; display: none; font-family: var(--mono); }
+.err-msg.show { display: block; }
+
+select {
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='7'%3E%3Cpath d='M1 1l4.5 4.5L10 1' stroke='%231a1916' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 13px center; padding-right: 36px;
+}
+textarea { resize: vertical; min-height: 88px; line-height: 1.65; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+.submit-wrap { margin-top: 36px; padding-top: 32px; border-top: 1px solid var(--rule); }
+.btn-submit {
+  width: 100%; padding: 17px 24px; background: var(--ink); color: white; border: none; border-radius: var(--r);
+  font-family: var(--serif); font-size: 17px; font-weight: 700; cursor: pointer; letter-spacing: 0.02em;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  transition: background 0.15s, transform 0.1s; position: relative;
+}
+.btn-submit:hover:not(:disabled) { background: #2d2c28; }
+.btn-submit:active:not(:disabled) { transform: scale(0.99); }
+.btn-submit:disabled { background: #b0aca4; cursor: not-allowed; }
+.btn-arrow { font-family: var(--mono); font-size: 14px; opacity: 0.6; transition: transform 0.2s; }
+.btn-submit:hover .btn-arrow { transform: translateX(4px); }
+.spinner { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; display: none; }
+.btn-submit.loading .spinner { display: block; }
+.btn-submit.loading .btn-text, .btn-submit.loading .btn-arrow { display: none; }
+
+.result-screen { display: none; padding: 64px 40px; text-align: center; }
+.result-screen.show { display: block; }
+.result-icon { width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px; margin: 0 auto 24px; }
+.result-icon.success { background: #e6f7ee; }
+.result-icon.error   { background: #fdecea; }
+.result-title { font-family: var(--serif); font-size: 24px; font-weight: 800; margin-bottom: 10px; }
+.result-desc { font-size: 14px; color: var(--muted); line-height: 1.7; max-width: 380px; margin: 0 auto 24px; white-space: pre-line; }
+.result-link { font-family: var(--mono); font-size: 12px; color: var(--accent); text-decoration: none; letter-spacing: 0.06em; }
+.result-link:hover { text-decoration: underline; }
+.btn-reset { display: inline-block; margin-top: 24px; padding: 11px 28px; border: 1.5px solid var(--ink); border-radius: var(--r); background: transparent; font-family: var(--sans); font-size: 13px; font-weight: 700; cursor: pointer; transition: background 0.12s; color: var(--ink); }
+.btn-reset:hover { background: var(--bg); }
+
+.security-note { margin-top: 14px; font-size: 11px; color: var(--muted); font-family: var(--mono); line-height: 1.7; text-align: center; letter-spacing: 0.02em; }
+.security-note span { display: inline-block; background: #e8f5ee; color: #1e7d4b; padding: 2px 8px; border-radius: 3px; margin-right: 4px; font-size: 10px; letter-spacing: 0.06em; }
+
+@keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 600px) {
+  .page { padding: 32px 20px 60px; }
+  .form-body { padding: 24px 20px 28px; }
+  .type-tabs { grid-template-columns: repeat(2, 1fr); }
+  .row2 { grid-template-columns: 1fr; }
+  .site-header { padding: 16px 20px; }
+  .page-title { font-size: 28px; }
+}
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="site-logo">イベント<em>登録</em></div>
+  <div class="site-badge">Event System v2.1</div>
+</header>
+
+<div class="page">
+  <div class="page-eyebrow">New Event</div>
+  <h1 class="page-title">イベントを登録する</h1>
+  <p class="page-desc">フォームを記入して送信すると GitHub Issue が作成され、Slack に自動通知されます。</p>
+
+  <div class="config-banner" id="config-banner">
+    <strong>⚠️ 設定が必要です</strong><br>
+    <code>index.html</code> 末尾の <code>CONFIG</code> オブジェクトに
+    <code>owner</code>・<code>repo</code>・<code>pat</code> を設定してください。
+    詳細は <code>README.md</code> を参照。
+  </div>
+
+  <div class="form-card" id="form-card">
+
+    <div class="type-tabs">
+      <button class="type-tab active" data-type="meeting" onclick="selectType(this)">
+        <span class="tab-icon">🗓</span><span class="tab-jp">ミーティング</span><span class="tab-en">meeting</span>
+      </button>
+      <button class="type-tab" data-type="seminar" onclick="selectType(this)">
+        <span class="tab-icon">📢</span><span class="tab-jp">外部説明会</span><span class="tab-en">seminar</span>
+      </button>
+      <button class="type-tab" data-type="social" onclick="selectType(this)">
+        <span class="tab-icon">🍻</span><span class="tab-jp">飲み会</span><span class="tab-en">social</span>
+      </button>
+      <button class="type-tab" data-type="study" onclick="selectType(this)">
+        <span class="tab-icon">📚</span><span class="tab-jp">勉強会</span><span class="tab-en">study</span>
+      </button>
+    </div>
+
+    <div class="form-body" id="form-body">
+
+      <div class="slabel">基本情報</div>
+
+      <div class="field">
+        <label>タイトル <span class="req">必須</span></label>
+        <input type="text" id="f-title" placeholder="例：週次定例ミーティング">
+        <div class="err-msg" id="e-title">タイトルを入力してください</div>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label>開始日時 <span class="req">必須</span></label>
+          <input type="datetime-local" id="f-start">
+          <div class="err-msg" id="e-start">開始日時を入力してください</div>
+        </div>
+        <div class="field">
+          <label>終了日時 <span class="req">必須</span></label>
+          <input type="datetime-local" id="f-end">
+          <div class="err-msg" id="e-end">終了日時を入力してください</div>
+        </div>
+      </div>
+      <div class="err-msg" id="e-time" style="margin-top:-10px;margin-bottom:14px;">終了は開始より後にしてください</div>
+
+      <div class="row2">
+        <div class="field">
+          <label>場所 <span class="req">必須</span></label>
+          <input type="text" id="f-location" placeholder="例：会議室A">
+          <div class="err-msg" id="e-location">場所を入力してください</div>
+        </div>
+        <div class="field">
+          <label>開催形式 <span class="req">必須</span></label>
+          <select id="f-loctype">
+            <option value="offline">対面（offline）</option>
+            <option value="online">オンライン（online）</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>URL（任意）</label>
+        <input type="url" id="f-url" placeholder="https://zoom.us/j/...">
+      </div>
+
+      <div class="field">
+        <label>主催者 <span class="req">必須</span></label>
+        <input type="text" id="f-organizer" placeholder="例：山田太郎">
+        <div class="err-msg" id="e-organizer">主催者を入力してください</div>
+      </div>
+
+      <div class="slabel" style="margin-top:28px;">内容</div>
+
+      <div class="field">
+        <label>概要</label>
+        <textarea id="f-summary" rows="3" placeholder="イベントの概要（先頭200字がSlackに表示されます）"></textarea>
+      </div>
+
+      <div id="extra-wrap"></div>
+
+      <div class="submit-wrap">
+        <button class="btn-submit" id="btn-submit" onclick="handleSubmit()">
+          <span class="spinner"></span>
+          <span class="btn-text">Slackに通知して登録する</span>
+          <span class="btn-arrow">→</span>
+        </button>
+        <div class="security-note">
+          <span>🔒 SECURE</span>
+          Slack Webhook URL はサーバー側 Secrets に保管 — このページには含まれません
+        </div>
+      </div>
+    </div>
+
+    <div class="result-screen" id="result-screen">
+      <div class="result-icon" id="result-icon"></div>
+      <div class="result-title" id="result-title"></div>
+      <div class="result-desc"  id="result-desc"></div>
+      <a class="result-link" id="result-link" target="_blank" rel="noopener" style="display:none"></a>
+      <br>
+      <button class="btn-reset" onclick="resetForm()">もう1件登録する</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════
+//  ⚙️  設定（リポジトリに push する前に変更してください）
+// ════════════════════════════════════════════════
+const CONFIG = {
+  owner: "YOUR_GITHUB_OWNER",    // 例: "myorg"
+  repo:  "YOUR_GITHUB_REPO",     // 例: "event-system"
+  pat:   "YOUR_FINE_GRAINED_PAT" // Fine-Grained PAT（issues: write のみ）
+};
+// ════════════════════════════════════════════════
+
+if (CONFIG.owner.startsWith("YOUR_") || CONFIG.pat.startsWith("YOUR_")) {
+  document.getElementById("config-banner").classList.add("show");
+}
+
+let currentType = "meeting";
+
+const EXTRA = {
+  meeting: `
+    <div class="slabel">議題</div>
+    <div class="field">
+      <label>議題リスト</label>
+      <textarea id="f-agenda" rows="3" placeholder="- 進捗報告&#10;- 課題共有&#10;- その他"></textarea>
+    </div>`,
+  seminar: `
+    <div class="slabel">説明会情報</div>
+    <div class="field">
+      <label>主催団体</label>
+      <input type="text" id="f-org" placeholder="例：〇〇株式会社">
+    </div>
+    <div class="field">
+      <label>対象者</label>
+      <input type="text" id="f-target" placeholder="例：全社員">
+    </div>`,
+  social: `
+    <div class="slabel">店舗情報</div>
+    <div class="row2">
+      <div class="field">
+        <label>店名・予約名</label>
+        <input type="text" id="f-shop" placeholder="例：○○居酒屋">
+      </div>
+      <div class="field">
+        <label>予算</label>
+        <input type="text" id="f-budget" placeholder="例：4,000円程度">
+      </div>
+    </div>`,
+  study: `
+    <div class="slabel">勉強会情報</div>
+    <div class="field">
+      <label>トピック</label>
+      <textarea id="f-topic" rows="2" placeholder="- React Server Components&#10;- TypeScript 5.x"></textarea>
+    </div>
+    <div class="field">
+      <label>難易度</label>
+      <select id="f-level"><option value="入門">入門</option><option value="中級">中級</option><option value="上級">上級</option></select>
+    </div>`
+};
+
+function selectType(btn) {
+  document.querySelectorAll(".type-tab").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  currentType = btn.dataset.type;
+  document.getElementById("extra-wrap").innerHTML = EXTRA[currentType] || "";
+}
+document.getElementById("extra-wrap").innerHTML = EXTRA["meeting"];
+
+function g(id) { const el = document.getElementById(id); return el ? el.value.trim() : ""; }
+
+function validate() {
+  document.querySelectorAll(".err-msg").forEach(e => e.classList.remove("show"));
+  document.querySelectorAll("input,select,textarea").forEach(e => e.classList.remove("err"));
+  let ok = true;
+
+  const req = (id, eid) => {
+    if (!g(id)) {
+      document.getElementById(id).classList.add("err");
+      document.getElementById(eid).classList.add("show");
+      ok = false;
+    }
+  };
+  req("f-title", "e-title"); req("f-start", "e-start");
+  req("f-end", "e-end"); req("f-location", "e-location"); req("f-organizer", "e-organizer");
+
+  const s = document.getElementById("f-start").value;
+  const e = document.getElementById("f-end").value;
+  if (s && e && new Date(e) <= new Date(s)) {
+    document.getElementById("f-end").classList.add("err");
+    document.getElementById("e-time").classList.add("show");
+    ok = false;
+  }
+  return ok;
+}
+
+function collectExtra() {
+  if (currentType === "meeting") return { agenda: g("f-agenda") };
+  if (currentType === "seminar") return { organization: g("f-org"), target: g("f-target") };
+  if (currentType === "social")  return { shop: g("f-shop"), budget: g("f-budget") };
+  if (currentType === "study")   return { topic: g("f-topic"), level: g("f-level") };
+  return {};
+}
+
+async function handleSubmit() {
+  if (!validate()) { document.querySelector(".err-msg.show")?.scrollIntoView({ behavior: "smooth", block: "center" }); return; }
+
+  const btn = document.getElementById("btn-submit");
+  btn.classList.add("loading"); btn.disabled = true;
+
+  const TYPE_JP = { meeting:"ミーティング", seminar:"外部説明会", social:"飲み会", study:"勉強会" };
+
+  const data = {
+    type: currentType,
+    title: g("f-title"), start_time: g("f-start"), end_time: g("f-end"),
+    location: g("f-location"), location_type: document.getElementById("f-loctype").value,
+    url: g("f-url"), organizer: g("f-organizer"), summary: g("f-summary"),
+    ...collectExtra()
+  };
+
+  const body = [
+    "## イベント登録", "",
+    "| 項目 | 値 |", "|------|-----|",
+    `| 種別 | ${TYPE_JP[data.type]} |`,
+    `| 日時 | ${data.start_time} ～ ${data.end_time} |`,
+    `| 場所 | ${data.location}（${data.location_type}）|`,
+    `| 主催 | ${data.organizer} |`,
+    ...(data.url ? [`| URL  | ${data.url} |`] : []),
+    "", "### 概要", data.summary || "（未入力）",
+    "", "---", "",
+    "```json",
+    JSON.stringify(data, null, 2),
+    "```"
+  ].join("\n");
+
+  try {
+    const res = await fetch(`https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}/issues`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${CONFIG.pat}`,
+        "Accept": "application/vnd.github+json",
+        "Content-Type": "application/json",
+        "X-GitHub-Api-Version": "2022-11-28"
+      },
+      body: JSON.stringify({ title: `[イベント] ${data.title}`, body, labels: ["event-registration"] })
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || `HTTP ${res.status}`);
+    }
+    const issue = await res.json();
+
+    showResult({ ok: true, title: "登録完了！",
+      desc: `「${data.title}」を登録しました。\nGitHub Actions が Slack に自動通知します。`,
+      link: issue.html_url, linkText: `Issue #${issue.number} を確認する →` });
+
+  } catch (err) {
+    showResult({ ok: false, title: "送信エラー",
+      desc: `エラー：${err.message}\n\nCONFIG の owner / repo / pat を確認してください。` });
+  } finally {
+    btn.classList.remove("loading"); btn.disabled = false;
+  }
+}
+
+function showResult({ ok, title, desc, link, linkText }) {
+  document.getElementById("form-body").style.display = "none";
+  const sc = document.getElementById("result-screen"); sc.classList.add("show");
+  const ic = document.getElementById("result-icon");
+  ic.className = `result-icon ${ok ? "success" : "error"}`; ic.textContent = ok ? "✅" : "❌";
+  document.getElementById("result-title").textContent = title;
+  document.getElementById("result-desc").textContent  = desc;
+  const lk = document.getElementById("result-link");
+  if (link) { lk.href = link; lk.textContent = linkText; lk.style.display = "inline"; }
+}
+
+function resetForm() {
+  document.getElementById("form-body").style.display = "";
+  document.getElementById("result-screen").classList.remove("show");
+  document.getElementById("result-link").style.display = "none";
+  document.querySelectorAll("input[type=text],input[type=url],textarea").forEach(el => el.value = "");
+  ["f-start","f-end"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("f-loctype").value = "offline";
+  document.querySelectorAll(".err-msg").forEach(e => e.classList.remove("show"));
+  document.querySelectorAll("input,select,textarea").forEach(e => e.classList.remove("err"));
+}
+</script>
+</body>
+</html>
