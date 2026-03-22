@@ -1,0 +1,121 @@
+name: Event Validate & Notify
+
+on:
+  push:
+    paths:
+      - 'events/**/*.md'
+  pull_request:
+    paths:
+      - 'events/**/*.md'
+
+# ① PRコメント・ファイル書き換え（id採番）に必要な権限
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  validate-and-notify:
+    runs-on: ubuntu-latest
+    steps:
+      # ── チェックアウト ──────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # id採番でファイルを push するため fetch-depth: 0
+          fetch-depth: 0
+
+      # ── Python セットアップ ────────────────────────────
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      # ── 変更された events/**/*.md を取得 ──────────────
+      - name: Get changed event files
+        id: changed-files
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- 'events/**/*.md' | tr '\n' ' ')
+          else
+            FILES=$(git diff --name-only HEAD~1 HEAD -- 'events/**/*.md' 2>/dev/null || git diff --name-only HEAD -- 'events/**/*.md' | tr '\n' ' ')
+          fi
+          echo "files=$FILES" >> $GITHUB_OUTPUT
+          echo "対象ファイル: $FILES"
+
+      # ── バリデーション & id 自動採番 ───────────────────
+      - name: Validate event files
+        id: validate
+        run: |
+          FILES="${{ steps.changed-files.outputs.files }}"
+          if [ -z "$FILES" ]; then
+            echo "チェック対象のイベントファイルはありません。"
+            exit 0
+          fi
+          python scripts/validate_event.py $FILES --auto-id
+        continue-on-error: true
+
+      # ── バリデーション失敗時：PR/Issueコメントでフィードバック ──
+      - name: Post validation error comment
+        if: steps.validate.outcome == 'failure' && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ❌ イベントファイルのバリデーションエラー
+
+            \`events/\` 配下のMarkdownファイルにエラーが見つかりました。
+            上記のActionsログを確認し、エラーを修正してください。
+
+            ### よくあるエラー
+            - 必須項目（id, type, title, start_time, end_time, location, location_type, organizer）が未入力
+            - \`type\` の値が不正（有効値: meeting / seminar / social / study）
+            - \`location_type\` の値が不正（有効値: online / offline）
+            - 日時形式が正しくない（例: \`2026-03-25T14:00\`）
+            - \`end_time\` が \`start_time\` より前になっている
+            `
+            })
+
+      - name: Fail if validation failed
+        if: steps.validate.outcome == 'failure'
+        run: exit 1
+
+      # ── id採番でファイルが変更された場合は commit & push ──
+      - name: Commit auto-generated id
+        if: github.event_name == 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add events/
+          if git diff --staged --quiet; then
+            echo "id採番による変更なし"
+          else
+            git commit -m "chore: id自動採番 [skip ci]"
+            git push
+          fi
+
+      # ── Slack 通知（push 時のみ）───────────────────────
+      - name: Notify Slack
+        if: github.event_name == 'push'
+        run: |
+          FILES="${{ steps.changed-files.outputs.files }}"
+          if [ -z "$FILES" ]; then
+            echo "通知対象ファイルなし"
+            exit 0
+          fi
+          for FILE in $FILES; do
+            if [ -f "$FILE" ]; then
+              GITHUB_FILE_URL="https://github.com/${{ github.repository }}/blob/${{ github.sha }}/$FILE"
+              python scripts/notify_slack.py "$FILE" \
+                --webhook-url "${{ secrets.SLACK_WEBHOOK_URL }}" \
+                --github-url "$GITHUB_FILE_URL"
+            fi
+          done
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
